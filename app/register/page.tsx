@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -8,6 +9,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { Upload, X, User, Camera } from "lucide-react";
+import Image from "next/image";
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -26,9 +29,14 @@ const formSchema = z.object({
   profession: z.string(),
   birthCertificateNo: z.string(),
   nationality: z.string(),
+  photo: z.any().optional(),
 });
 
 export default function RegisterPage() {
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -36,8 +44,77 @@ export default function RegisterPage() {
     },
   });
 
+  const handlePhotoChange = (file: File | null) => {
+    if (file) {
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        toast.error("Invalid file type. Please upload a JPEG, PNG, or WebP image.");
+        return;
+      }
+
+      // Validate file size (max 5MB)
+      const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+      if (file.size > maxSize) {
+        toast.error("File size too large. Please upload an image smaller than 5MB.");
+        return;
+      }
+
+      setPhotoFile(file);
+      form.setValue('photo', file);
+
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPhotoPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      form.setValue('photo', null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      handlePhotoChange(files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const removePhoto = () => {
+    handlePhotoChange(null);
+  };
+
   function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
+    // Create FormData for file upload
+    const formData = new FormData();
+    
+    // Append all form fields
+    Object.entries(values).forEach(([key, value]) => {
+      if (key === 'photo' && photoFile) {
+        formData.append('photo', photoFile);
+      } else if (key !== 'photo' && value) {
+        formData.append(key, value.toString());
+      }
+    });
+
+    console.log('Form data prepared for submission:', values);
+    console.log('Photo file:', photoFile);
     toast.success("Registration submitted successfully!");
   }
 
@@ -48,6 +125,102 @@ export default function RegisterPage() {
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Photo Upload Section */}
+            <div className="space-y-4">
+              <FormLabel className="text-base font-semibold">Profile Photo</FormLabel>
+              
+              {photoPreview ? (
+                <div className="flex items-start gap-4">
+                  <div className="relative">
+                    <div className="w-32 h-32 rounded-lg overflow-hidden border-2 border-gray-200">
+                      <Image
+                        src={photoPreview}
+                        alt="Profile preview"
+                        width={128}
+                        height={128}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                      onClick={removePhoto}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-600 mb-2">
+                      <strong>File:</strong> {photoFile?.name}
+                    </p>
+                    <p className="text-sm text-gray-600 mb-2">
+                      <strong>Size:</strong> {photoFile ? (photoFile.size / 1024 / 1024).toFixed(2) : 0} MB
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => document.getElementById('photo-upload')?.click()}
+                      className="flex items-center gap-2"
+                    >
+                      <Camera className="h-4 w-4" />
+                      Change Photo
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                    isDragOver 
+                      ? 'border-blue-400 bg-blue-50' 
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                >
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+                      <User className="h-8 w-8 text-gray-400" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-medium text-gray-900 mb-1">
+                        Upload Profile Photo
+                      </p>
+                      <p className="text-sm text-gray-500 mb-4">
+                        Drag and drop your photo here, or click to browse
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('photo-upload')?.click()}
+                        className="flex items-center gap-2"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Choose File
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-4">
+                    Supported formats: JPEG, PNG, WebP • Max size: 5MB
+                  </p>
+                </div>
+              )}
+              
+              <input
+                id="photo-upload"
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  handlePhotoChange(file);
+                }}
+                className="hidden"
+              />
+            </div>
+
             <FormField
               control={form.control}
               name="name"
